@@ -60,11 +60,16 @@ def flatten_neighbour_list(results_df, dedupe=True, sort=True):
     for s in results_df["neighbours"]:
         if isinstance(s, str) and s:
             items.extend([x for x in s.split(";") if x])
+
     if dedupe:
         items = list(set(items))
+
     if sort:
         items = sorted(items)
-    return ",".join(items), len(items)
+
+    # IMPORTANT: include a space after each comma in the output string
+    csv_str = ", ".join(items)
+    return items, csv_str
 
 # ---------------- UI ----------------
 st.title("📍 Nearby Postcodes Finder (AU)")
@@ -99,19 +104,30 @@ if run:
 
     results_df, missing = find_neighbours_pgeocode(df_postcodes, inputs, radius)
 
-    # Flatten to a single comma-separated list from the neighbours column
-    neighbours_csv, count = flatten_neighbour_list(results_df, dedupe=True, sort=True)
+    # Flatten to a single comma-and-space separated list from the neighbours column
+    neighbours_list, neighbours_csv = flatten_neighbour_list(results_df, dedupe=True, sort=True)
 
     computed = len(set(inputs)) - len(missing)
-    st.success(f"Computed neighbours for {computed} postcode(s). Total neighbours in list: {count}.")
+    st.success(f"Computed neighbours for {computed} postcode(s). Total neighbours in list: {len(neighbours_list)}.")
     if missing:
         st.warning("Not found in dataset: " + ", ".join(missing))
 
+    # Display the comma + space separated list
     st.text_area("Comma-separated neighbours", neighbours_csv, height=150)
 
+    # Download as TXT (comma + space separated)
     st.download_button(
-        label="Download neighbours list (.txt)",
+        label="Download neighbours (TXT)",
         data=neighbours_csv.encode("utf-8"),
         file_name=f"neighbours_within_{int(radius)}km.txt",
         mime="text/plain",
+    )
+
+    # Download as CSV (single column)
+    csv_df = pd.DataFrame({"postcode": neighbours_list})
+    st.download_button(
+        label="Download neighbours (CSV)",
+        data=csv_df.to_csv(index=False).encode("utf-8"),
+        file_name=f"neighbours_within_{int(radius)}km.csv",
+        mime="text/csv",
     )
