@@ -1,4 +1,3 @@
-import io
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -12,9 +11,7 @@ def load_postcodes_au():
     # pgeocode bundles AU postcodes with centroids
     nomi = pgeocode.Nominatim("AU")
     df = nomi._data[["postal_code", "latitude", "longitude"]].dropna().copy()
-    # Normalize to 4-digit strings (preserve leading zeros)
     df["postal_code"] = df["postal_code"].astype(str).str.strip().str.zfill(4)
-    # Filter out rows where lat/lon are missing or invalid
     df = df[(df["latitude"].notna()) & (df["longitude"].notna())]
     df = df.reset_index(drop=True)
     return df
@@ -48,26 +45,30 @@ def find_neighbours_pgeocode(df, inputs, radius_km):
             results_map[p] = []
             missing.append(p)
             continue
-        # distance from p to every AU postcode
-        dists = geodist.query_postal_code(p, all_codes)  # numpy array of km
+        dists = geodist.query_postal_code(p, all_codes)  # numpy array (km)
         neighbours = [c for c, d in zip(all_codes, dists) if (not np.isnan(d)) and d <= radius_km]
         results_map[p] = sorted(set(neighbours))
 
     rows = []
     for p in inputs:
         ns = results_map.get(p, [])
-        rows.append(
-            {
-                "input_postcode": p,
-                "neighbours": ";".join(ns),
-                "neighbour_count": len(ns),
-            }
-        )
+        rows.append({"input_postcode": p, "neighbours": ";".join(ns)})
     return pd.DataFrame(rows), sorted(set(missing))
+
+def flatten_neighbour_list(results_df, dedupe=True, sort=True):
+    items = []
+    for s in results_df["neighbours"]:
+        if isinstance(s, str) and s:
+            items.extend([x for x in s.split(";") if x])
+    if dedupe:
+        items = list(set(items))
+    if sort:
+        items = sorted(items)
+    return ",".join(items), len(items)
 
 # ---------------- UI ----------------
 st.title("📍 Nearby Postcodes Finder (AU)")
-st.write("Paste comma-separated postcodes, set a radius (km), and download results. No latitude/longitude required.")
+st.write("Paste comma-separated postcodes, set a radius (km). Output is a single comma-separated list of neighbouring postcodes.")
 
 df_postcodes = load_postcodes_au()
 st.caption(f"Loaded {len(df_postcodes):,} AU postcodes.")
@@ -88,7 +89,7 @@ with col2:
         step=1.0
     )
 
-run = st.button("Find nearby postcodes")
+run = st.button("Find neighbours")
 
 if run:
     inputs = parse_postcodes(text)
@@ -98,27 +99,19 @@ if run:
 
     results_df, missing = find_neighbours_pgeocode(df_postcodes, inputs, radius)
 
+    # Flatten to a single comma-separated list from the neighbours column
+    neighbours_csv, count = flatten_neighbour_list(results_df, dedupe=True, sort=True)
+
     computed = len(set(inputs)) - len(missing)
-    st.success(f"Computed neighbours for {computed} postcode(s).")
+    st.success(f"Computed neighbours for {computed} postcode(s). Total neighbours in list: {count}.")
     if missing:
         st.warning("Not found in dataset: " + ", ".join(missing))
 
-    st.dataframe(results_df, use_container_width=True, height=420)
+    st.text_area("Comma-separated neighbours", neighbours_csv, height=150)
 
-    csv_bytes = results_df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="Download results as CSV",
-        data=csv_bytes,
-        file_name=f"nearby_within_{int(radius)}km.csv",
-        mime="text/csv",
-    )
-
-    st.markdown("**Summary**")
-    st.write(
-        {
-            "inputs_total": len(inputs),
-            "unique_inputs": len(set(inputs)),
-            "missing_inputs": len(missing),
-            "rows_in_output": len(results_df),
-        }
+        label="Download neighbours list (.txt)",
+        data=neighbours_csv.encode("utf-8"),
+        file_name=f"neighbours_within_{int(radius)}km.txt",
+        mime="text/plain",
     )
