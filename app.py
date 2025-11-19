@@ -5,30 +5,6 @@ import pgeocode
 
 st.set_page_config(page_title="Nearby Postcodes Finder (AU)", page_icon="📍", layout="wide")
 
-st.markdown(
-    """
-    <style>
-      .miq-header {
-        background: #2c002f;
-        padding: 12px 16px;
-        border-radius: 10px;
-        margin-bottom: 14px;
-      }
-      .miq-header h1 {
-        color: #ffffff;
-        font-size: 1.15rem;
-        line-height: 1.2;
-        margin: 0;
-        font-weight: 600;
-      }
-    </style>
-    <div class="miq-header">
-      <h1>MiQ Nearby Postcodes Finder</h1>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 # ---------------- Data ----------------
 @st.cache_data
 def load_postcodes_au():
@@ -155,4 +131,5 @@ if run:
         file_name=f"neighbours_within_{int(radius)}km.csv",
         mime="text/csv",
     )
+
 
